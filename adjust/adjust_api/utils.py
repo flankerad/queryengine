@@ -1,9 +1,12 @@
 import csv
 import logging
+import operator
 from datetime import datetime
 from .models import Analytics
+from django.db.models import Q, Sum, Count, Avg
+from functools import reduce
 '''
-    date	channel	country	os	impressions	clicks	installs	spend	revenue
+    date channel country os	impressions	clicks installs spend revenue
 '''
 
 logger = logging.getLogger(__name__)
@@ -34,3 +37,29 @@ def calculate_cpi():
         Calculate CPI
         cpi = spend / installs
     '''
+
+def get_annotate_result(queryset, qp):
+    '''
+        Get annotation results
+        Map the keys from query params to annotation functions
+        Create annotation expression
+        Return annotationed queryset
+    '''
+    annotate_func = {
+        'sum': Sum,
+        'count': Count,
+        'avg': Avg
+    }
+    annotate_exp = []
+
+    for key in annotate_func.keys():
+        if  qp.get(key):
+            values = qp.get(key).split(',')
+            annotate_exp.append([annotate_func[key](field) for field in values])
+
+    if qp.get('sortby'):
+        queryset = queryset.order_by(qp.get('sort_by'))
+        return queryset.annotate(*reduce(operator.add, annotate_exp)).order_by(qp.get('sortby'))
+
+    else:
+        return queryset.annotate(*reduce(operator.add, annotate_exp)) 
