@@ -9,6 +9,7 @@ def data_analytics(request):
     '''
         Filter, group and sort data
     '''
-    if request.method == 'POST':
+    if request.method == 'GET':
         return JsonResponse({'name':'flanker'})
+    
     
