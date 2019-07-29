@@ -1,13 +1,10 @@
 import csv
 import logging
-import operator
 from datetime import datetime
 from .models import Analytics
-from django.db.models import Q, Sum, Count, Avg
+from django.db.models import Q, Sum, Count, Avg, ExpressionWrapper, FloatField, F
 from functools import reduce
-'''
-    date channel country os	impressions	clicks installs spend revenue
-'''
+import operator
 
 logger = logging.getLogger(__name__)
 
@@ -27,39 +24,104 @@ def insert_data():
                 spend = row[7],
                 revenue = row[8]
             )
-            logger.info('Created object')
-            logger.info(obj)   
-            print('Created object')
-            print(obj)      
 
-def calculate_cpi():
+
+def get_filtered_result(qp):
+    '''
+        Create fitler expressions
+        Return filtered results
+    '''
+    filters = [ 'date_to', 
+                'date_from',
+                'date',
+                'channel',
+                'country',
+                'os',
+                'impression',
+                'clicks',
+                'installs',
+                'spend',
+                'revenue']
+
+    lookup_exp = {
+        'date_to': 'date__lte',
+        'date_from': 'date__gte'
+    }
+    kwargs = {}
+        
+    '''
+        Get the filters in query params
+        Check for filters with lookup exp
+    '''
+    for f in filters:
+        if f in qp:
+
+            if f in lookup_exp:
+                f_key = lookup_exp[f]
+            else:
+                f_key = f
+
+            kwargs[f_key] = qp.get(f)
+
+    return Analytics.objects.filter(**kwargs)
+
+def calculate_cpi(queryset):
     '''
         Calculate CPI
         cpi = spend / installs
     '''
+    return queryset.annotate(cpi=Sum(ExpressionWrapper(F('spend')/F('installs'), output_field=FloatField())))     
+
+def get_sorted_result(queryset, qp, **kwargs):
+    '''
+        Return a sorted queryset
+    '''
+    order = qp.get('order','') 
+    sortby = qp.get('sortby')
+
+    if sortby in kwargs:
+        sortby = order + kwargs[qp.get('sortby')]
+
+    return queryset.order_by(sortby)
+
 
 def get_annotate_result(queryset, qp):
     '''
-        Get annotation results
-        Map the keys from query params to annotation functions
-        Create annotation expression
-        Return annotationed queryset
+        Return annotation result of queryset
     '''
+
     annotate_func = {
         'sum': Sum,
         'count': Count,
-        'avg': Avg
+        'avg': Avg,
     }
     annotate_exp = []
+    sort_dict = {}
 
-    for key in annotate_func.keys():
-        if  qp.get(key):
-            values = qp.get(key).split(',')
-            annotate_exp.append([annotate_func[key](field) for field in values])
+    '''
+        Check if there are annotation keys in query params
+        Create annotation expression
+    '''
+    if set(qp).intersection(annotate_func): 
 
-    if qp.get('sortby'):
-        queryset = queryset.order_by(qp.get('sort_by'))
-        return queryset.annotate(*reduce(operator.add, annotate_exp)).order_by(qp.get('sortby'))
+        for key in annotate_func.keys():
+            if qp.get(key):
 
-    else:
-        return queryset.annotate(*reduce(operator.add, annotate_exp)) 
+                values = qp.get(key).split(',')
+                
+                if 'cpi' in values: # remove cpi from aggregation, already calculated
+                    values.remove('cpi')
+                
+                # Create annotation expression, from query params
+                annotate_exp.append([annotate_func[key](field) for field in values])
+                '''
+                    Create a sort dict for annotated keys
+                    Eg: Sum('revenue') -> 'revenue__sum' 
+                '''
+                for f in values:
+                    sort_dict[f] = f + "__" + key 
+
+              
+        queryset = queryset.annotate(*reduce(operator.add, annotate_exp))
+    
+    return queryset, sort_dict

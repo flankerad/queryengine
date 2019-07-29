@@ -1,48 +1,58 @@
 # from django.shortcuts import render
 import json
 import logging
-from django.core import serializers
-from django.http import JsonResponse
+from django.http import HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from adjust_api.models import Analytics
-from .utils import get_annotate_result
-
+from adjust_api.utils import get_filtered_result, get_annotate_result,\
+                            get_sorted_result, calculate_cpi
+from django.core.serializers.json import DjangoJSONEncoder
 
 logger = logging.getLogger(__name__)
 
+def formatted_result(queryset, valueset):
+    '''
+        Return list of valueset 
+        or get valueset out of queryset if not already
+    '''
+    if not valueset:
+        queryset = queryset.values()
+
+    return (list(queryset))
+
 # Create your views here.
-@csrf_exempt
 def data_analytics(request):
     '''
         Filter, group and sort data
     '''
+    valueset = False
+
+    if request.method == 'POST':
+        body = json.loads(request.body)
+
+        return JsonResponse(body)
+
     if request.method == 'GET':
+        #'date_from': '2017-05-30', 'date_to': '', 'val': 'channel,country', 'sum': 'impressions, clicks', 'sortby': 'clicks', 'ord': 'desc'}
 
-        try:    
-            qp = request.GET.dict()
-            filters = ['date_from',
-                        'date_to',
-                        'channel',
-                        'country',
-                        'os',
-                        'impression',
-                        'clicks',
-                        'installs',
-                        'spends',
-                        'revenue']
-            kwargs = {}
+        qp = request.GET.dict()
 
-            for f in filters:
-                if f in qp:
-                    kwargs[f] = qp.get(f)
+        queryset = get_filtered_result(qp)
 
-            queryset = Analytics.objects.filters(**kwargs)
+        if qp.get('values'):
+            valueset = True
+            queryset = queryset.values(*qp.get('values').split(','))
 
-            if qp.get('values'):
-                queryset = get_annotate_result(queryset, qp)
-                result = serializers.serialize(json, queryset)
+        if 'cpi' in qp.values():
+            queryset = calculate_cpi(queryset)
+
+        queryset, sort_dict = get_annotate_result(queryset, qp)
         
-        except ValueError as e:
-            logger.error(e.msg)
+        if qp.get('sortby'):
+            result = get_sorted_result(queryset, qp, **sort_dict)
 
-        return JsonResponse({'result': result})
+        result = formatted_result(queryset, valueset)
+
+    return JsonResponse({'result': result})
+
+ 
