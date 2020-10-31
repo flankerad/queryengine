@@ -1,7 +1,7 @@
 # Query Engine
 
 Django project exposing a dataset by a single GET API with a custom Django query engine that performs aggregation, filteration and sorting.
-Operations are automatically detected based on URL operators and parameters of GET API.
+Queries are automatically performed based on URL operators and parameters of GET API.
 
 ## Getting Started
 
