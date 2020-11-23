@@ -1,7 +1,6 @@
 # Autonomous Query Engine
+Django query layer that constructs Django ORM aggregation, filteration and sorting queries based on API queryparams. This exposes dataset via REST API for demonstration.
 
-Django project exposing a dataset by a single GET API with a custom Django query engine that performs aggregation, filteration and sorting.
-<b> Queries are automatically performed based on URL operators and parameters of GET API. </b>
 
 ## Getting Started
 
